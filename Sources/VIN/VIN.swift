@@ -6,6 +6,36 @@ import Foundation
 /// The Vehicle Identification Number, as standardized in ISO 3779.
 public struct VIN: Equatable, Hashable {
 
+    /// Represents the validity state of a VIN.
+    public enum Validity: Equatable, Hashable {
+        /// The VIN is syntactically invalid (wrong length, invalid characters).
+        case invalid
+        /// The VIN is syntactically valid but checksum has not been verified or is not applicable.
+        case valid
+        /// The VIN is syntactically valid AND has a correct checksum.
+        case validWithChecksum
+
+        /// Whether the VIN meets basic syntactic requirements.
+        public var isSyntacticallyValid: Bool {
+            switch self {
+                case .invalid:
+                    return false
+                case .valid, .validWithChecksum:
+                    return true
+            }
+        }
+
+        /// Whether the VIN has a verified checksum.
+        public var hasValidChecksum: Bool {
+            switch self {
+                case .validWithChecksum:
+                    return true
+                case .invalid, .valid:
+                    return false
+            }
+        }
+    }
+
     public static let NumberOfCharacters: Int = 17
     public static let AllowedCharacters: CharacterSet = .init(charactersIn: "ABCDEFGHJKLMNPRSTUVWXYZ0123456789")
     public static let Unknown: VIN = .init(content: "UNKNWN78901234567")
@@ -13,21 +43,27 @@ public struct VIN: Equatable, Hashable {
     /// The 17 characters as a String.
     public let content: String
 
-    /// Whether the VIN is syntactically valid, i.e. contains the right kind and amount of characters.
-    /// For North American VINs, this also validates the checksum digit.
+    /// The validity state of the VIN.
+    /// - Returns `.invalid` if the VIN doesn't meet basic ISO 3779 requirements
+    /// - Returns `.validWithChecksum` if syntactically valid and checksum is correct
+    /// - Returns `.valid` if syntactically valid but checksum is incorrect or not applicable
+    public var validity: Validity {
+        guard self.content.count == Self.NumberOfCharacters else { return .invalid }
+        guard self.content.rangeOfCharacter(from: Self.AllowedCharacters.inverted) == nil else { return .invalid }
+
+        return self.isChecksumValid ? .validWithChecksum : .valid
+    }
+
+    /// Whether the VIN is syntactically valid (has correct length and characters).
+    /// This property is provided for convenience and backward compatibility.
+    /// - Returns `true` if validity is `.valid` or `.validWithChecksum`, `false` otherwise
     public var isValid: Bool {
-        guard self.content.count == Self.NumberOfCharacters else { return false }
-        guard self.content.rangeOfCharacter(from: Self.AllowedCharacters.inverted) == nil else { return false }
-        
-        // Additional checksum validation for North American VINs
-        // North American VINs typically start with 1-5 (US, Canada, Mexico)
-        if let firstChar = self.content.first,
-           let firstDigit = Int(String(firstChar)),
-           (1...5).contains(firstDigit) {
-            return self.isChecksumValid
+        switch self.validity {
+            case .invalid:
+                return false
+            case .valid, .validWithChecksum:
+                return true
         }
-        
-        return true
     }
     
     /// Whether the checksum digit is valid according to the VIN checksum algorithm.
@@ -133,8 +169,16 @@ public struct VIN: Equatable, Hashable {
         self.content = content
     }
 
-    /// Convenience method, if all you want to check for is validity.
-    public static func isValid(_ vin: String) -> Bool { VIN(content: vin).isValid }
+    /// Convenience method to check the validity state of a VIN string.
+    public static func validity(of vin: String) -> Validity {
+        VIN(content: vin).validity
+    }
+
+    /// Convenience method to check if a VIN string is syntactically valid.
+    /// - Returns `true` if the VIN has correct length and characters, regardless of checksum
+    public static func isValid(_ vin: String) -> Bool {
+        VIN(content: vin).isValid
+    }
     
     /// Propose a valid VIN based on the current VIN's data.
     /// Always returns a valid VIN by:

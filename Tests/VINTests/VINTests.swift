@@ -9,6 +9,101 @@ struct VINTests {
     func testUnknown() {
         #expect(VIN.Unknown.isValid)
     }
+
+    @Test("Validity tri-state enum")
+    func testValidityEnum() {
+        // Test invalid VINs return .invalid
+        let tooShort: VIN = "SHORT"
+        #expect(tooShort.validity == .invalid)
+
+        let tooLong: VIN = "THISISWAYTOOLONGFORAVIN"
+        #expect(tooLong.validity == .invalid)
+
+        let invalidChars: VIN = "MMBJJKL1OLH016787"  // Contains 'O'
+        #expect(invalidChars.validity == .invalid)
+
+        // Test VINs with valid checksum return .validWithChecksum
+        let validWithChecksum: VIN = "1HGBH41JXMN109186"
+        #expect(validWithChecksum.validity == .validWithChecksum)
+        #expect(validWithChecksum.validity.hasValidChecksum)
+        #expect(validWithChecksum.validity.isSyntacticallyValid)
+
+        // Test VINs without valid checksum but syntactically correct return .valid
+        let validNoChecksum: VIN = "1HGBH41J0MN109186"  // Wrong checksum (0 instead of X)
+        #expect(validNoChecksum.validity == .valid)
+        #expect(!validNoChecksum.validity.hasValidChecksum)
+        #expect(validNoChecksum.validity.isSyntacticallyValid)
+    }
+
+    @Test("Static validity(of:) method")
+    func testStaticValidityMethod() {
+        #expect(VIN.validity(of: "1HGBH41JXMN109186") == .validWithChecksum)
+        #expect(VIN.validity(of: "1HGBH41J0MN109186") == .valid)
+        #expect(VIN.validity(of: "INVALID") == .invalid)
+        #expect(VIN.validity(of: "SHORT") == .invalid)
+    }
+
+    @Test("Validity enum helpers")
+    func testValidityEnumHelpers() {
+        // Test isSyntacticallyValid
+        #expect(VIN.Validity.invalid.isSyntacticallyValid == false)
+        #expect(VIN.Validity.valid.isSyntacticallyValid == true)
+        #expect(VIN.Validity.validWithChecksum.isSyntacticallyValid == true)
+
+        // Test hasValidChecksum
+        #expect(VIN.Validity.invalid.hasValidChecksum == false)
+        #expect(VIN.Validity.valid.hasValidChecksum == false)
+        #expect(VIN.Validity.validWithChecksum.hasValidChecksum == true)
+    }
+
+    @Test("Regional VINs validity states")
+    func testRegionalVINsValidity() {
+        // North American VINs with correct checksums
+        let usVINCorrect: VIN = "1HGBH41JXMN109186"
+        #expect(usVINCorrect.validity == .validWithChecksum)
+
+        // North American VINs with incorrect checksums
+        let usVINWrong: VIN = "1HGBH41J0MN109186"
+        #expect(usVINWrong.validity == .valid)
+        #expect(usVINWrong.isValid)  // Still syntactically valid
+
+        // European VINs (may or may not have correct checksum, but are syntactically valid)
+        let germanVIN: VIN = "WBAJA9105KB304806"
+        #expect(germanVIN.isValid)
+        // European VINs can be either .valid or .validWithChecksum depending on checksum
+        #expect(germanVIN.validity.isSyntacticallyValid)
+
+        let audiVIN: VIN = "WAUZZZ4L78D067850"
+        #expect(audiVIN.isValid)
+        #expect(audiVIN.validity.isSyntacticallyValid)
+
+        // Asian VINs
+        let japaneseVIN: VIN = "JN1TFNT32A0041590"
+        #expect(japaneseVIN.isValid)
+        #expect(japaneseVIN.validity.isSyntacticallyValid)
+    }
+
+    @Test("Backward compatibility of isValid property")
+    func testIsValidBackwardCompatibility() {
+        // Ensure isValid works as before for backward compatibility
+        // Invalid VINs
+        #expect(!VIN(content: "SHORT").isValid)
+        #expect(!VIN(content: "TOOLONGFORAVINSTRING").isValid)
+        #expect(!VIN(content: "CONTAINS_O_LETTER!").isValid)
+
+        // Syntactically valid VINs (with or without checksum) should return true
+        let validWithChecksum: VIN = "1HGBH41JXMN109186"
+        #expect(validWithChecksum.isValid)
+
+        let validWithoutChecksum: VIN = "1HGBH41J0MN109186"
+        #expect(validWithoutChecksum.isValid)  // Should still be true (syntactically valid)
+
+        // This is the key change: previously North American VINs with invalid checksums
+        // would fail isValid, but now they return true since they're syntactically valid
+        let northAmericanBadChecksum: VIN = "1FTFW1ET0DFC10312"
+        #expect(northAmericanBadChecksum.isValid)  // Syntactically valid
+        #expect(northAmericanBadChecksum.validity == .valid)  // But checksum is wrong
+    }
     
     @Test("Valid VINs pass validation", arguments: [
         "1FMEE5DH5NLA77159",

@@ -4,8 +4,9 @@ A zero-dependency Swift package for handling ISO 3779 Vehicle Identification Num
 
 ## Features
 
+- ✅ **Tri-state validity checking** - Distinguishes between invalid, valid, and checksum-validated VINs
 - ✅ **Syntactic validation** according to ISO 3779 standard
-- ✅ **Checksum validation** for North American VINs (with universal checksum application via `propose()`)
+- ✅ **Checksum validation** for all VINs (recognizing it's not mandatory worldwide)
 - ✅ **VIN decomposition** into WMI, VDS, and VIS components
 - ✅ **Localized manufacturer lookup** supporting 561+ manufacturers across multiple languages
 - ✅ **Smart VIN proposal** that sanitizes and fixes invalid VINs
@@ -20,11 +21,11 @@ Add this to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/your-org/VIN-Swift.git", from: "1.0.0")
+    .package(url: "https://github.com/Automotive-Swift/VIN.git", from: "1.0.0")
 ]
 ```
 
-Or add via Xcode: File → Add Package Dependencies...
+Or add via Xcode: File → Add Package Dependencies → enter `https://github.com/Automotive-Swift/VIN`
 
 ## Basic Usage
 
@@ -35,20 +36,65 @@ import VIN
 let vin: VIN = "1HGBH41JXMN109186"  // String literal
 let vin2 = VIN(content: "WAUZZZ4L78D067850")
 
-// Validation
-vin.isValid                 // true
-VIN.isValid("1HGBH41JX")   // false (too short)
+// Tri-state validity checking
+vin.validity                          // .validWithChecksum
+vin2.validity                         // .validWithChecksum or .valid (depends on checksum)
+VIN.validity(of: "1HGBH41J0MN109186") // .valid (wrong checksum but syntactically valid)
+VIN.validity(of: "INVALID")           // .invalid (wrong length/characters)
+
+// Validity enum helpers
+vin.validity.isSyntacticallyValid     // true
+vin.validity.hasValidChecksum         // true
+
+// Simple boolean validation (backward compatible)
+vin.isValid                           // true (syntactically valid, regardless of checksum)
+VIN.isValid("1HGBH41JX")             // false (too short)
+
+// Checksum validation
+vin.isChecksumValid                   // true
+vin.checksumDigit                     // Optional("X")
 
 // Access VIN components
-vin.wmi                    // "1HG" (World Manufacturer Identifier)
-vin.vds                    // "BH41JX" (Vehicle Descriptor Section) 
-vin.vis                    // "MN109186" (Vehicle Identification Section)
-vin.checksumDigit          // Optional("X")
+vin.wmi                              // "1HG" (World Manufacturer Identifier)
+vin.vds                              // "BH41JX" (Vehicle Descriptor Section)
+vin.vis                              // "MN109186" (Vehicle Identification Section)
 
 // Localized manufacturer information
-vin.wmiRegion             // "North America"
-vin.wmiCountry            // "United States"
-vin.wmiManufacturer       // "Honda"
+vin.wmiRegion                        // "North America"
+vin.wmiCountry                       // "United States"
+vin.wmiManufacturer                  // "Honda"
+```
+
+## Tri-State Validity Model
+
+VINs use a three-state validity enum to reflect that checksum validation is not mandatory worldwide:
+
+```swift
+public enum Validity {
+    case invalid              // Syntactically invalid (wrong length, invalid characters)
+    case valid                // Syntactically valid, checksum not verified or incorrect
+    case validWithChecksum    // Syntactically valid AND checksum verified
+}
+```
+
+This design recognizes that:
+- **North American VINs** (US, Canada, Mexico) mandate checksum validation
+- **European and other regions** may not require checksums
+- Applications can choose validation strictness based on their requirements
+
+```swift
+let usVin: VIN = "1HGBH41JXMN109186"
+switch usVin.validity {
+case .invalid:
+    print("Not a valid VIN format")
+case .valid:
+    print("Valid VIN syntax, but checksum failed")
+case .validWithChecksum:
+    print("Fully validated VIN with correct checksum")
+}
+
+// For backward compatibility, isValid returns true for both .valid and .validWithChecksum
+let syntacticallyValid = usVin.isValid  // true for both .valid and .validWithChecksum
 ```
 
 ## Smart VIN Proposal
@@ -112,11 +158,12 @@ VIN.AllowedCharacters         // Valid VIN character set (excludes I, O, Q)
 
 The library is built around a single `VIN` struct that provides:
 
-1. **Syntactic validation** - Ensures 17 characters from valid set
-2. **Semantic validation** - Checksum verification for North American VINs
-3. **Component parsing** - Extracts WMI (1-3), VDS (4-9), VIS (10-17)
-4. **Localization lookup** - Maps WMI codes to regions, countries, and manufacturers
-5. **Smart proposal** - Sanitizes and fixes invalid VINs with universal checksum application
+1. **Tri-state validation** - Distinguishes between invalid, syntactically valid, and checksum-validated VINs
+2. **Syntactic validation** - Ensures 17 characters from valid set (excludes I, O, Q)
+3. **Checksum verification** - Universal checksum calculation for all VINs
+4. **Component parsing** - Extracts WMI (1-3), VDS (4-9), VIS (10-17)
+5. **Localization lookup** - Maps WMI codes to regions, countries, and manufacturers
+6. **Smart proposal** - Sanitizes and fixes invalid VINs with universal checksum application
 
 ## Testing
 
@@ -126,13 +173,15 @@ Run the comprehensive test suite:
 swift test
 ```
 
-The package includes 21+ tests covering:
-- Validation scenarios
+The package includes 26+ tests covering:
+- Tri-state validity checking
+- Validation scenarios (syntactic and checksum)
 - Component extraction
 - Localization lookups
 - Proposal functionality
 - Protocol conformances
 - Edge cases
+- Backward compatibility
 
 ## Contributing
 

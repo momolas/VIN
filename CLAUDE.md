@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Build and Test:**
 - `swift build` - Build the library
-- `swift test` - Run the test suite (21 tests covering validation, parsing, localization, and VIN proposal)
+- `swift test` - Run the test suite (26 tests covering tri-state validity, validation, parsing, localization, and VIN proposal)
 - `swift package generate-xcodeproj` - Generate Xcode project if needed
 
 ## Architecture
@@ -14,12 +14,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a zero-dependency Swift package for ISO 3779 Vehicle Identification Number (VIN) handling. The architecture centers around:
 
 **VIN Struct** (`Sources/VIN/VIN.swift`):
-- Value type with syntactic validation
+- Value type with tri-state validity model (`VIN.Validity` enum)
 - Decomposes into WMI (World Manufacturer Identifier, positions 1-3), VDS (Vehicle Descriptor Section, positions 4-9), and VIS (Vehicle Identification Section, positions 10-17)
-- Protocol conformances: `Equatable`, `Identifiable`, `CustomStringConvertible`, `ExpressibleByStringLiteral`, `Codable`
-- Static `isValid(_:)` convenience method for basic validity checking
+- Protocol conformances: `Equatable`, `Hashable`, `Identifiable`, `CustomStringConvertible`, `ExpressibleByStringLiteral`, `Codable`
+- `validity` property returns `.invalid`, `.valid`, or `.validWithChecksum`
+- `isValid` property for backward compatibility (returns `true` for both `.valid` and `.validWithChecksum`)
+- `isChecksumValid` property for explicit checksum verification
+- Static `validity(of:)` method to check validity state without creating instance
+- Static `isValid(_:)` convenience method for basic syntactic validation
 - Instance `propose()` method that always returns valid VIN with universal checksum application
 - `Unknown` constant ("UNKNWN78901234567") for convenience
+
+**Validity Model:**
+The library uses a tri-state validity enum to reflect that checksum validation is not mandatory worldwide:
+- `.invalid` - Syntactically invalid (wrong length, contains I/O/Q, or other invalid characters)
+- `.valid` - Syntactically valid per ISO 3779, but checksum not verified or incorrect
+- `.validWithChecksum` - Syntactically valid AND checksum verified
+This design recognizes that North American VINs mandate checksums while European and other regions may not
 
 **Localization-Driven WMI Data:**
 - WMI region/country/manufacturer lookups are powered by extensive localization files (561 manufacturers)
